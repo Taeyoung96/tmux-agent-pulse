@@ -18,7 +18,7 @@ DONE_THRESHOLD="${AGENT_PULSE_DONE_THRESHOLD:-3}"
 ICON_RESPONDING="${AGENT_PULSE_ICON_RESPONDING:-💬}"
 ICON_DONE="${AGENT_PULSE_ICON_DONE:-✅}"
 ICON_WAITING="${AGENT_PULSE_ICON_WAITING:-❓}"
-WAITING_PATTERN="${AGENT_PULSE_WAITING_PATTERN:-Do you want to allow}"
+WAITING_PATTERN="${AGENT_PULSE_WAITING_PATTERN:-Do you want to allow|Do you want to proceed|\?$}"
 
 # md5 command differs between macOS and Linux
 if command -v md5 &>/dev/null; then
