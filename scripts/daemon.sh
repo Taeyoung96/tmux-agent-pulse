@@ -81,7 +81,7 @@ while true; do
         if [ "$DONE_COUNT" -ge "$DONE_THRESHOLD" ]; then
           # Check if pane is showing a permission prompt
           PANE_TEXT=$(tmux capture-pane -t "$PANE_ID" -p -S -10 2>/dev/null)
-          if echo "$PANE_TEXT" | grep -qE "$WAITING_PATTERN"; then
+          if echo "$PANE_TEXT" | grep -vE "^[[:space:]]*❯" | grep -qE "$WAITING_PATTERN"; then
             if [ "$STATE" != "waiting" ]; then
               echo "waiting" > "$STATE_FILE"
             fi
