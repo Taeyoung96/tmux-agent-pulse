@@ -36,13 +36,13 @@ while true; do
   PS_TREE=$(ps -eo pid,ppid,args 2>/dev/null)
 
   # Phase 1: Update per-pane states (runs in subshell via pipe, writes to state files)
-  tmux list-panes -a -F '#{session_name}:#{window_index} #{pane_id} #{pane_pid}' 2>/dev/null | while read TARGET PANE_ID PANE_PID; do
+  tmux list-panes -a -F '#{session_name}:#{window_index} #{pane_id} #{pane_pid} #{pane_active}' 2>/dev/null | while read TARGET PANE_ID PANE_PID PANE_ACTIVE; do
     PANE_KEY=$(echo "$PANE_ID" | tr -d '%')
     STATE_FILE="$STATE_DIR/$PANE_KEY"
     STATE=$(cat "$STATE_FILE" 2>/dev/null || echo "idle")
 
     # User is viewing this window + done/waiting state → reset pane state to idle
-    if ([ "$STATE" = "done" ] || [ "$STATE" = "waiting" ]) && echo "$VISIBLE" | grep -qFx "$TARGET"; then
+    if ([ "$STATE" = "done" ] || [ "$STATE" = "waiting" ]) && [ "$PANE_ACTIVE" = "1" ] && echo "$VISIBLE" | grep -qFx "$TARGET"; then
       echo "idle" > "$STATE_FILE"
       echo "0" > "$COUNTER_DIR/$PANE_KEY"
       echo "0" > "$DONE_COUNTER_DIR/$PANE_KEY"
