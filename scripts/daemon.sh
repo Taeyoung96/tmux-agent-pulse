@@ -53,6 +53,21 @@ while true; do
     STATE_FILE="$STATE_DIR/$PANE_KEY"
     STATE=$(cat "$STATE_FILE" 2>/dev/null || echo "idle")
 
+    # Detect AI CLI tools by checking child process args
+    CLI_RUNNING=$(echo "$PS_TREE" | awk -v ppid="$PANE_PID" '$2 == ppid' | grep -qE "$CLI_PATTERN" && echo "1" || echo "0")
+
+    # If no CLI is running, reset any stale done/waiting state immediately
+    # (prevents ✅/❓ from persisting after the session has ended)
+    if [ "$CLI_RUNNING" = "0" ]; then
+      if [ "$STATE" = "done" ] || [ "$STATE" = "waiting" ]; then
+        echo "idle" > "$STATE_FILE"
+        echo "0" > "$COUNTER_DIR/$PANE_KEY"
+        echo "0" > "$DONE_COUNTER_DIR/$PANE_KEY"
+        rm -f "$SNAPSHOT_DIR/$PANE_KEY"
+      fi
+      continue
+    fi
+
     # User is viewing this window + done state → reset pane state to idle
     # (waiting is NOT reset here — it persists until the user answers the prompt)
     if [ "$STATE" = "done" ] && [ "$PANE_ACTIVE" = "1" ] && echo "$VISIBLE" | grep -qFx "$TARGET"; then
@@ -62,9 +77,6 @@ while true; do
       rm -f "$SNAPSHOT_DIR/$PANE_KEY"
       continue
     fi
-
-    # Detect AI CLI tools by checking child process args
-    echo "$PS_TREE" | awk -v ppid="$PANE_PID" '$2 == ppid' | grep -qE "$CLI_PATTERN" || continue
 
     # Early permission prompt detection — only for idle state
     # (responding/waiting states use DONE_COUNT fallback in hash comparison)
@@ -93,11 +105,21 @@ while true; do
     [ -z "$LAST" ] && continue
 
     if [ "$CURRENT" != "$LAST" ]; then
+      # Content changed while in done state (e.g., user pressed /clear or typed new message)
+      # Reset to idle so the next response can be detected from scratch
+      if [ "$STATE" = "done" ]; then
+        echo "idle" > "$STATE_FILE"
+        echo "0" > "$COUNT_FILE"
+        echo "0" > "$DONE_COUNT_FILE"
+        rm -f "$SNAP_FILE"
+        continue
+      fi
+
       COUNT=$((COUNT + 1))
       echo "$COUNT" > "$COUNT_FILE"
       echo "0" > "$DONE_COUNT_FILE"
 
-      if [ "$COUNT" -ge "$THRESHOLD" ] && [ "$STATE" != "responding" ] && [ "$STATE" != "done" ]; then
+      if [ "$COUNT" -ge "$THRESHOLD" ] && [ "$STATE" != "responding" ]; then
         echo "responding" > "$STATE_FILE"
       fi
     else
