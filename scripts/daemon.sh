@@ -41,8 +41,9 @@ while true; do
     STATE_FILE="$STATE_DIR/$PANE_KEY"
     STATE=$(cat "$STATE_FILE" 2>/dev/null || echo "idle")
 
-    # User is viewing this window + done/waiting state → reset pane state to idle
-    if ([ "$STATE" = "done" ] || [ "$STATE" = "waiting" ]) && [ "$PANE_ACTIVE" = "1" ] && echo "$VISIBLE" | grep -qFx "$TARGET"; then
+    # User is viewing this window + done state → reset pane state to idle
+    # (waiting is NOT reset here — it persists until the user answers the prompt)
+    if [ "$STATE" = "done" ] && [ "$PANE_ACTIVE" = "1" ] && echo "$VISIBLE" | grep -qFx "$TARGET"; then
       echo "idle" > "$STATE_FILE"
       echo "0" > "$COUNTER_DIR/$PANE_KEY"
       echo "0" > "$DONE_COUNTER_DIR/$PANE_KEY"
@@ -52,6 +53,13 @@ while true; do
 
     # Detect AI CLI tools by checking child process args
     echo "$PS_TREE" | awk -v ppid="$PANE_PID" '$2 == ppid' | grep -qE "$CLI_PATTERN" || continue
+
+    # Early permission prompt detection — fires regardless of hash state
+    PANE_RAW=$(tmux capture-pane -t "$PANE_ID" -p -S -10 2>/dev/null)
+    if echo "$PANE_RAW" | grep -vE "^[[:space:]]*❯" | grep -qE "$WAITING_PATTERN"; then
+      [ "$STATE" != "waiting" ] && echo "waiting" > "$STATE_FILE"
+      continue
+    fi
 
     SNAP_FILE="$SNAPSHOT_DIR/$PANE_KEY"
     COUNT_FILE="$COUNTER_DIR/$PANE_KEY"
