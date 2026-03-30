@@ -60,7 +60,10 @@ while true; do
     DONE_COUNT=$(cat "$DONE_COUNT_FILE" 2>/dev/null || echo "0")
 
     # Compare pane output snapshot
-    CURRENT=$(tmux capture-pane -t "$PANE_ID" -p -S -3 2>/dev/null | eval "$MD5_CMD")
+    CURRENT=$(tmux capture-pane -t "$PANE_ID" -p -S -30 2>/dev/null \
+      | awk '{a[NR]=$0} /^─/{s=NR} END{lo=(s>10?s-10:1); for(i=lo;i<s;i++) print a[i]}' \
+      | tail -3 \
+      | eval "$MD5_CMD")
     LAST=$(cat "$SNAP_FILE" 2>/dev/null)
     echo "$CURRENT" > "$SNAP_FILE"
 
