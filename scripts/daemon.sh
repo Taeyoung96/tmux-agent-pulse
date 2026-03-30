@@ -71,7 +71,7 @@ while true; do
       echo "$COUNT" > "$COUNT_FILE"
       echo "0" > "$DONE_COUNT_FILE"
 
-      if [ "$COUNT" -ge "$THRESHOLD" ] && [ "$STATE" != "responding" ]; then
+      if [ "$COUNT" -ge "$THRESHOLD" ] && [ "$STATE" != "responding" ] && [ "$STATE" != "done" ]; then
         echo "responding" > "$STATE_FILE"
       fi
     else
