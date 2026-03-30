@@ -10,15 +10,27 @@ SNAPSHOT_DIR="/tmp/agent-pulse-snapshots"
 STATE_DIR="/tmp/agent-pulse-states"
 COUNTER_DIR="/tmp/agent-pulse-counters"
 DONE_COUNTER_DIR="/tmp/agent-pulse-done-counters"
+PID_FILE="/tmp/agent-pulse-daemon.pid"
 mkdir -p "$SNAPSHOT_DIR" "$STATE_DIR" "$COUNTER_DIR" "$DONE_COUNTER_DIR"
 
+# Single-instance guard: kill any previous daemon
+if [ -f "$PID_FILE" ]; then
+  OLD_PID=$(cat "$PID_FILE")
+  if kill -0 "$OLD_PID" 2>/dev/null; then
+    kill "$OLD_PID" 2>/dev/null
+    sleep 0.3
+  fi
+fi
+echo $$ > "$PID_FILE"
+trap 'rm -f "$PID_FILE"' EXIT
+
 POLL_INTERVAL="${AGENT_PULSE_INTERVAL:-0.5}"
-THRESHOLD="${AGENT_PULSE_THRESHOLD:-5}"
+THRESHOLD="${AGENT_PULSE_THRESHOLD:-2}"
 DONE_THRESHOLD="${AGENT_PULSE_DONE_THRESHOLD:-3}"
 ICON_RESPONDING="${AGENT_PULSE_ICON_RESPONDING:-💬}"
 ICON_DONE="${AGENT_PULSE_ICON_DONE:-✅}"
 ICON_WAITING="${AGENT_PULSE_ICON_WAITING:-❓}"
-WAITING_PATTERN="${AGENT_PULSE_WAITING_PATTERN:-Do you want to allow|Do you want to proceed|\?$}"
+WAITING_PATTERN="${AGENT_PULSE_WAITING_PATTERN:-Do you want to allow|Do you want to proceed}"
 
 # md5 command differs between macOS and Linux
 if command -v md5 &>/dev/null; then
@@ -54,11 +66,14 @@ while true; do
     # Detect AI CLI tools by checking child process args
     echo "$PS_TREE" | awk -v ppid="$PANE_PID" '$2 == ppid' | grep -qE "$CLI_PATTERN" || continue
 
-    # Early permission prompt detection — fires regardless of hash state
-    PANE_RAW=$(tmux capture-pane -t "$PANE_ID" -p -S -10 2>/dev/null)
-    if echo "$PANE_RAW" | grep -vE "^[[:space:]]*❯" | grep -qE "$WAITING_PATTERN"; then
-      [ "$STATE" != "waiting" ] && echo "waiting" > "$STATE_FILE"
-      continue
+    # Early permission prompt detection — only for idle state
+    # (responding/waiting states use DONE_COUNT fallback in hash comparison)
+    if [ "$STATE" = "idle" ]; then
+      PANE_RAW=$(tmux capture-pane -t "$PANE_ID" -p -S -10 2>/dev/null)
+      if echo "$PANE_RAW" | grep -vE "^[[:space:]]*❯" | grep -qE "$WAITING_PATTERN"; then
+        echo "waiting" > "$STATE_FILE"
+        continue
+      fi
     fi
 
     SNAP_FILE="$SNAPSHOT_DIR/$PANE_KEY"
@@ -69,7 +84,7 @@ while true; do
 
     # Compare pane output snapshot
     CURRENT=$(tmux capture-pane -t "$PANE_ID" -p -S -30 2>/dev/null \
-      | awk '{a[NR]=$0} /^─/{s=NR} END{lo=(s>10?s-10:1); for(i=lo;i<s;i++) print a[i]}' \
+      | awk '{a[NR]=$0} /^─/{seps[++c]=NR} END{cut=(c>=2?seps[c-1]:(c==1?seps[1]:NR+1)); lo=(cut>10?cut-10:1); for(i=lo;i<cut;i++) print a[i]}' \
       | tail -3 \
       | eval "$MD5_CMD")
     LAST=$(cat "$SNAP_FILE" 2>/dev/null)
@@ -101,8 +116,7 @@ while true; do
           fi
           echo "0" > "$COUNT_FILE"
         fi
-      else
-        echo "0" > "$COUNT_FILE"
+      # Do not reset COUNT for idle state — allow accumulation for slow-changing content
       fi
     fi
   done
