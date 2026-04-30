@@ -59,7 +59,7 @@ while true; do
     # If no CLI is running, reset any stale done/waiting state immediately
     # (prevents ✅/❓ from persisting after the session has ended)
     if [ "$CLI_RUNNING" = "0" ]; then
-      if [ "$STATE" = "done" ] || [ "$STATE" = "waiting" ]; then
+      if [ "$STATE" = "done" ] || [ "$STATE" = "waiting" ] || [ "$STATE" = "responding" ]; then
         echo "idle" > "$STATE_FILE"
         echo "0" > "$COUNTER_DIR/$PANE_KEY"
         echo "0" > "$DONE_COUNTER_DIR/$PANE_KEY"
