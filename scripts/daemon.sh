@@ -82,7 +82,7 @@ while true; do
     # (responding/waiting states use DONE_COUNT fallback in hash comparison)
     if [ "$STATE" = "idle" ]; then
       PANE_RAW=$(tmux capture-pane -t "$PANE_ID" -p -S -10 2>/dev/null)
-      if echo "$PANE_RAW" | grep -vE "^[[:space:]]*❯" | grep -qE "$WAITING_PATTERN"; then
+      if echo "$PANE_RAW" | grep -vE "^[[:space:]]*[›❯]" | grep -qE "$WAITING_PATTERN"; then
         echo "waiting" > "$STATE_FILE"
         continue
       fi
@@ -95,9 +95,19 @@ while true; do
     DONE_COUNT=$(cat "$DONE_COUNT_FILE" 2>/dev/null || echo "0")
 
     # Compare pane output snapshot
-    CURRENT=$(tmux capture-pane -t "$PANE_ID" -p -S -30 2>/dev/null \
-      | awk '{a[NR]=$0} /^─/{seps[++c]=NR} END{cut=(c>=2?seps[c-1]:(c==1?seps[1]:NR+1)); lo=(cut>10?cut-10:1); for(i=lo;i<cut;i++) print a[i]}' \
-      | tail -3 \
+    # Find the input prompt line (› for Codex, ❯ for Claude Code) and hash 5 lines above it.
+    # During responding the prompt scrolls up (or is absent), so those 5 lines are the
+    # streaming content. When idle/done the prompt is at the bottom and those lines are stable.
+    CURRENT=$(tmux capture-pane -t "$PANE_ID" -p -S -20 2>/dev/null \
+      | awk '
+          {lines[NR]=$0}
+          /^[[:space:]]*[›❯]/ {prompt_line=NR}
+          END {
+            cut = (prompt_line > 0) ? prompt_line : NR + 1
+            lo = (cut > 6 ? cut - 5 : 1)
+            for (i = lo; i < cut; i++) print lines[i]
+          }
+        ' \
       | eval "$MD5_CMD")
     LAST=$(cat "$SNAP_FILE" 2>/dev/null)
     echo "$CURRENT" > "$SNAP_FILE"
@@ -129,7 +139,7 @@ while true; do
         if [ "$DONE_COUNT" -ge "$DONE_THRESHOLD" ]; then
           # Check if pane is showing a permission prompt
           PANE_TEXT=$(tmux capture-pane -t "$PANE_ID" -p -S -10 2>/dev/null)
-          if echo "$PANE_TEXT" | grep -vE "^[[:space:]]*❯" | grep -qE "$WAITING_PATTERN"; then
+          if echo "$PANE_TEXT" | grep -vE "^[[:space:]]*[›❯]" | grep -qE "$WAITING_PATTERN"; then
             if [ "$STATE" != "waiting" ]; then
               echo "waiting" > "$STATE_FILE"
             fi
