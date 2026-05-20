@@ -39,7 +39,7 @@ elif command -v md5sum &>/dev/null; then
   MD5_CMD="md5sum | cut -d' ' -f1"
 fi
 
-CLI_PATTERN="${AGENT_PULSE_CLI_PATTERN:-claude|codex|gemini}"
+CLI_PATTERN="${AGENT_PULSE_CLI_PATTERN:-claude|codex|gemini|hermes}"
 
 while true; do
   VISIBLE=$(tmux list-clients -F '#{session_name}:#{window_index}' 2>/dev/null)
@@ -81,7 +81,7 @@ while true; do
     # Early permission prompt detection — only for idle state
     # (responding/waiting states use DONE_COUNT fallback in hash comparison)
     if [ "$STATE" = "idle" ]; then
-      PANE_RAW=$(tmux capture-pane -t "$PANE_ID" -p -S -10 2>/dev/null)
+      PANE_RAW=$(tmux capture-pane -t "$PANE_ID" -p 2>/dev/null | tail -10)
       if echo "$PANE_RAW" | grep -vE "^[[:space:]]*[›❯]" | grep -qE "$WAITING_PATTERN"; then
         echo "waiting" > "$STATE_FILE"
         continue
@@ -101,7 +101,7 @@ while true; do
     CURRENT=$(tmux capture-pane -t "$PANE_ID" -p -S -20 2>/dev/null \
       | awk '
           {lines[NR]=$0}
-          /^[[:space:]]*[›❯]/ {prompt_line=NR}
+          /^([[:space:]]*[›❯]|⚕[[:space:]]*❯)/ {prompt_line=NR}
           END {
             cut = (prompt_line > 0) ? prompt_line : NR + 1
             lo = (cut > 6 ? cut - 5 : 1)
@@ -138,7 +138,7 @@ while true; do
         echo "$DONE_COUNT" > "$DONE_COUNT_FILE"
         if [ "$DONE_COUNT" -ge "$DONE_THRESHOLD" ]; then
           # Check if pane is showing a permission prompt
-          PANE_TEXT=$(tmux capture-pane -t "$PANE_ID" -p -S -10 2>/dev/null)
+          PANE_TEXT=$(tmux capture-pane -t "$PANE_ID" -p 2>/dev/null | tail -10)
           if echo "$PANE_TEXT" | grep -vE "^[[:space:]]*[›❯]" | grep -qE "$WAITING_PATTERN"; then
             if [ "$STATE" != "waiting" ]; then
               echo "waiting" > "$STATE_FILE"
